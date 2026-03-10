@@ -61,11 +61,20 @@ namespace projectTank.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized resource of type System.IO.UnmanagedMemoryStream similar to System.IO.MemoryStream.
+        /// </summary>
+        internal static System.IO.UnmanagedMemoryStream Explosion {
+            get {
+                return ResourceManager.GetStream("Explosion", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
-        internal static System.Drawing.Bitmap Tank_1 {
+        internal static System.Drawing.Bitmap TankA {
             get {
-                object obj = ResourceManager.GetObject("Tank 1", resourceCulture);
+                object obj = ResourceManager.GetObject("TankA", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
@@ -73,10 +82,37 @@ namespace projectTank.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
-        internal static System.Drawing.Bitmap Tank_2 {
+        internal static System.Drawing.Bitmap TankB {
             get {
-                object obj = ResourceManager.GetObject("Tank 2", resourceCulture);
+                object obj = ResourceManager.GetObject("TankB", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.IO.UnmanagedMemoryStream similar to System.IO.MemoryStream.
+        /// </summary>
+        internal static System.IO.UnmanagedMemoryStream TankMove {
+            get {
+                return ResourceManager.GetStream("TankMove", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.IO.UnmanagedMemoryStream similar to System.IO.MemoryStream.
+        /// </summary>
+        internal static System.IO.UnmanagedMemoryStream TankShoot {
+            get {
+                return ResourceManager.GetStream("TankShoot", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.IO.UnmanagedMemoryStream similar to System.IO.MemoryStream.
+        /// </summary>
+        internal static System.IO.UnmanagedMemoryStream WarBGM {
+            get {
+                return ResourceManager.GetStream("WarBGM", resourceCulture);
             }
         }
     }
