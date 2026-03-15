@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Linq;
 using System.Windows.Forms;
 using projectTank;
@@ -15,6 +16,23 @@ namespace projectTank
         private TankAI enemyAI;
         private PlayerController playerController;
         private List<Bullet> bullets = new List<Bullet>();
+        // Animated GIF explosions
+        private class AnimatedGif
+        {
+            public Image Img;
+            public Rectangle Bounds;
+            public int AgeMs;
+            public int DurationMs;
+            public EventHandler FrameChangedHandler;
+            public AnimatedGif(Image img, Rectangle bounds, int durationMs = 1000)
+            {
+                Img = img;
+                Bounds = bounds;
+                AgeMs = 0;
+                DurationMs = durationMs;
+            }
+        }
+        private List<AnimatedGif> explosions = new List<AnimatedGif>();
         private Map map;
 
         // Input flags
@@ -118,6 +136,7 @@ namespace projectTank
             enemyAI.Update(map);
 
             HandleBullets();
+            UpdateExplosions();
             CheckGameState();
 
             if (playerShootCooldown > 0) playerShootCooldown--;
@@ -263,6 +282,19 @@ namespace projectTank
                     g.FillEllipse(Brushes.Yellow, b.Bounds);
             }
 
+            // Draw active explosion GIFs
+            if (explosions != null)
+            {
+                foreach (var ex in explosions.ToList())
+                {
+                    try { ImageAnimator.UpdateFrames(ex.Img); } catch { }
+                    if (ex.Img != null)
+                        g.DrawImage(ex.Img, ex.Bounds);
+                }
+            }
+
+
+
             // Draw health bars safely
             if (player != null)
                 DrawHealthBar(g, player);
@@ -317,6 +349,8 @@ namespace projectTank
                 if (bullet.Owner == player && bullet.Bounds.IntersectsWith(enemy.Bounds))
                 {
                     enemy.TakeDamage(10);
+                    // create explosion gif at enemy location
+                    CreateExplosion(enemy.Bounds);
                     bullets.Remove(bullet);
                     soundSystem.Play("explosion", 0.7f);
                     continue;
@@ -325,6 +359,8 @@ namespace projectTank
                 if (bullet.Owner == enemy && bullet.Bounds.IntersectsWith(player.Bounds))
                 {
                     player.TakeDamage(10);
+                    // create explosion gif at player location proportional to tank size
+                    CreateExplosion(player.Bounds);
                     bullets.Remove(bullet);
                     soundSystem.Play("explosion", 0.7f);
                     continue;
@@ -332,8 +368,66 @@ namespace projectTank
 
                 if (map.IsColliding(bullet.Bounds))
                 {
+                    // create explosion gif at collision location (bullet)
+                    CreateExplosion(bullet.Bounds);
                     bullets.Remove(bullet);
                     soundSystem.Play("explosion", 0.7f);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Create an animated gif explosion at the given bounds.
+        /// </summary>
+        private void CreateExplosion(Rectangle bounds)
+        {
+            try
+            {
+                // Load the GIF directly from the provided file path so the resource file is used
+                string gifPath = @"C:\Users\HUAWEI\OneDrive\Desktop\GitHub\projectTank\projectTank\Resources\netanyahu.gif";
+                Image img = Image.FromFile(gifPath);
+                // Start animating and add to active explosions. Use a stable delegate so StopAnimate works.
+                EventHandler handler = new EventHandler(OnGifFrameChanged);
+                ImageAnimator.Animate(img, handler);
+                // Adjust bounds to center the gif on the collision area
+                // Make explosion proportional to the size of the impacted object (tank)
+                int baseSize = Math.Max(bounds.Width, bounds.Height);
+                int w = Math.Max(32, (int)(baseSize * 1.2));
+                int h = Math.Max(32, (int)(baseSize * 1.2));
+                Rectangle drawBounds = new Rectangle(bounds.X + (bounds.Width - w) / 2,
+                                                     bounds.Y + (bounds.Height - h) / 2,
+                                                     w, h);
+                var ag = new AnimatedGif(img, drawBounds, 1000);
+                ag.FrameChangedHandler = handler;
+                explosions.Add(ag);
+            }
+            catch
+            {
+                // ignore resource errors
+            }
+        }
+
+        private void OnGifFrameChanged(object sender, EventArgs e)
+        {
+            // ensure the form repaints when the animated gif advances frames
+            Invalidate();
+        }
+
+        private void UpdateExplosions()
+        {
+            if (explosions == null || explosions.Count == 0) return;
+
+            foreach (var ex in explosions.ToList())
+            {
+                // advance animated gif frames
+                try { ImageAnimator.UpdateFrames(ex.Img); } catch { }
+
+                ex.AgeMs += gameTimer.Interval;
+                if (ex.AgeMs > ex.DurationMs)
+                {
+                    try { if (ex.FrameChangedHandler != null) ImageAnimator.StopAnimate(ex.Img, ex.FrameChangedHandler); } catch { }
+                    try { ex.Img.Dispose(); } catch { }
+                    explosions.Remove(ex);
                 }
             }
         }
