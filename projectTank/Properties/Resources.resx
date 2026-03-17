@@ -137,6 +137,9 @@
   <data name="TankShoot" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\TankShoot.wav;System.IO.MemoryStream, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </data>
+  <data name="Title screen" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\Title screen.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="WarBGM" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\WarBGM.mp3;System.IO.MemoryStream, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </data>

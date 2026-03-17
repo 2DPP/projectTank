@@ -36,6 +36,7 @@ namespace projectTank
 
         // Game loop
         private Timer gameTimer = new Timer();
+        private bool isTitleScreen = true;
 
         // Real elapsed time tracking
         private System.Diagnostics.Stopwatch frameStopwatch = new System.Diagnostics.Stopwatch();
@@ -97,36 +98,8 @@ namespace projectTank
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            SetupGame();
-
-            // Show a simple loading label while frames load
-            Label loadingLabel = new Label();
-            loadingLabel.Text = "Loading...";
-            loadingLabel.ForeColor = Color.White;
-            loadingLabel.BackColor = Color.Black;
-            loadingLabel.Font = new Font("Arial", 24, FontStyle.Bold);
-            loadingLabel.AutoSize = true;
-            loadingLabel.Location = new Point(ClientSize.Width / 2 - 60, ClientSize.Height / 2 - 20);
-            this.Controls.Add(loadingLabel);
-            loadingLabel.BringToFront();
-
-            // Load GIF frames on a background thread
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                LoadGifFrames(Properties.Resources.ExplosionFx);
-
-            }).ContinueWith(t =>
-            {
-                // Back on UI thread — remove label and start game
-                this.Controls.Remove(loadingLabel);
-                loadingLabel.Dispose();
-
-                gameTimer.Interval = 16;
-                gameTimer.Tick += GameLoop;
-                frameStopwatch.Restart();
-                gameTimer.Start();
-
-            }, System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
+            // Only draw title screen initially
+            Invalidate();
         }
 
         private void SetupGame()
@@ -276,12 +249,32 @@ namespace projectTank
 
         private void Form1_KeyDown(object sender, KeyEventArgs e)
         {
+            // If on title screen → wait for SPACE
+            if (isTitleScreen)
+            {
+                if (e.KeyCode == Keys.Space)
+                {
+                    isTitleScreen = false;
+
+                    // Start the game
+                    SetupGame();
+
+                    gameTimer.Interval = 16;
+                    gameTimer.Tick += GameLoop;
+                    frameStopwatch.Restart();
+                    gameTimer.Start();
+                }
+                return;
+            }
+
+            // Normal game controls
             switch (e.KeyCode)
             {
                 case Keys.W: up = true; break;
                 case Keys.S: down = true; break;
                 case Keys.A: left = true; break;
                 case Keys.D: right = true; break;
+
                 case Keys.Space:
                     if (playerShootCooldown <= 0)
                     {
@@ -290,6 +283,7 @@ namespace projectTank
                         playerShootCooldown = PLAYER_SHOOT_COOLDOWN_FRAMES;
                     }
                     break;
+
                 case Keys.Escape: Close(); break;
             }
         }
@@ -370,6 +364,14 @@ namespace projectTank
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
+            // ===== TITLE SCREEN =====
+            if (isTitleScreen)
+            {
+                // Draw background image from resources
+                g.DrawImage(Properties.Resources.Title_screen,
+                    new Rectangle(0, 0, ClientSize.Width, ClientSize.Height));
+                return; // IMPORTANT: skip game rendering
+            }
 
             // Draw map walls
             if (map != null && map.Walls != null)
