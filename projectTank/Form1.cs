@@ -383,27 +383,33 @@ namespace projectTank
         {
             try
             {
-                // Load the GIF directly from the provided file path so the resource file is used
-                string gifPath = @"C:\Users\HUAWEI\OneDrive\Desktop\GitHub\projectTank\projectTank\Resources\netanyahu.gif";
-                Image img = Image.FromFile(gifPath);
-                // Start animating and add to active explosions. Use a stable delegate so StopAnimate works.
+                // Load GIF from Resources instead of file path
+                Image img = Properties.Resources.ExplosionFx;
+
+                // Start animating
                 EventHandler handler = new EventHandler(OnGifFrameChanged);
                 ImageAnimator.Animate(img, handler);
-                // Adjust bounds to center the gif on the collision area
-                // Make explosion proportional to the size of the impacted object (tank)
+
+                // Scale explosion based on object size
                 int baseSize = Math.Max(bounds.Width, bounds.Height);
                 int w = Math.Max(32, (int)(baseSize * 1.2));
                 int h = Math.Max(32, (int)(baseSize * 1.2));
-                Rectangle drawBounds = new Rectangle(bounds.X + (bounds.Width - w) / 2,
-                                                     bounds.Y + (bounds.Height - h) / 2,
-                                                     w, h);
+
+                Rectangle drawBounds = new Rectangle(
+                    bounds.X + (bounds.Width - w) / 2,
+                    bounds.Y + (bounds.Height - h) / 2,
+                    w,
+                    h
+                );
+
                 var ag = new AnimatedGif(img, drawBounds, 1000);
                 ag.FrameChangedHandler = handler;
+
                 explosions.Add(ag);
             }
             catch
             {
-                // ignore resource errors
+                // ignore errors
             }
         }
 
