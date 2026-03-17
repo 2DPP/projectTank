@@ -10,9 +10,8 @@
 
 namespace projectTank.Properties {
     using System;
-    using System.Drawing;
-
-
+    
+    
     /// <summary>
     ///   A strongly-typed resource class, for looking up localized strings, etc.
     /// </summary>
@@ -32,9 +31,7 @@ namespace projectTank.Properties {
         [global::System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]
         internal Resources() {
         }
-
-        public static object netanyahu { get; internal set; }
-
+        
         /// <summary>
         ///   Returns the cached ResourceManager instance used by this class.
         /// </summary>
@@ -69,6 +66,16 @@ namespace projectTank.Properties {
         internal static System.IO.UnmanagedMemoryStream Explosion {
             get {
                 return ResourceManager.GetStream("Explosion", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap ExplosionFx {
+            get {
+                object obj = ResourceManager.GetObject("ExplosionFx", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
             }
         }
         
