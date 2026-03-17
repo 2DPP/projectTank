@@ -1,6 +1,6 @@
 ﻿namespace projectTank
 {
-    partial class wwForm1
+    partial class Form1
     {
         /// <summary>
         /// Required designer variable.
@@ -45,4 +45,3 @@
         #endregion
     }
 }
-

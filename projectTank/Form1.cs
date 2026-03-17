@@ -5,10 +5,10 @@ using System.Drawing.Imaging;
 using System.Linq;
 using System.Windows.Forms;
 using projectTank;
-//upd
+//upd 2
 namespace projectTank
 {
-    public partial class wwForm1 : Form
+    public partial class Form1 : Form
     {
         // Game objects
         private Tank player;
@@ -16,24 +16,11 @@ namespace projectTank
         private TankAI enemyAI;
         private PlayerController playerController;
         private List<Bullet> bullets = new List<Bullet>();
-        // Animated GIF explosions
-        private class AnimatedGif
-        {
-            public Image Img;
-            public Rectangle Bounds;
-            public int AgeMs;
-            public int DurationMs;
-            public EventHandler FrameChangedHandler;
-            public AnimatedGif(Image img, Rectangle bounds, int durationMs = 1000)
-            {
-                Img = img;
-                Bounds = bounds;
-                AgeMs = 0;
-                DurationMs = durationMs;
-            }
-        }
         private List<AnimatedGif> explosions = new List<AnimatedGif>();
+        private List<SmokeParticle> smokeParticles = new List<SmokeParticle>();
         private Map map;
+        private List<GifFrame> explosionFrames = new List<GifFrame>();
+        private Random rng = new Random();
 
         // Input flags
         private bool up, down, left, right;
@@ -50,6 +37,10 @@ namespace projectTank
         // Game loop
         private Timer gameTimer = new Timer();
 
+        // Real elapsed time tracking
+        private System.Diagnostics.Stopwatch frameStopwatch = new System.Diagnostics.Stopwatch();
+        private int actualElapsed = 16;
+
         // Sounds
         private SoundSystem soundSystem;
 
@@ -57,12 +48,15 @@ namespace projectTank
         private int playerShootCooldown = 0;
         private const int PLAYER_SHOOT_COOLDOWN_FRAMES = 20;
 
+        // Smoke particle cap
+        private const int MAX_SMOKE_PARTICLES = 100;
+
         // Leveling
         private int level = 1;
         private int maxLevel = 2;
         private bool levelCompleted = false;
 
-        public wwForm1()
+        public Form1()
         {
             InitializeComponent();
 
@@ -92,7 +86,7 @@ namespace projectTank
 
             // Initialize SoundSystem
             soundSystem = new SoundSystem();
-            
+
             soundSystem.LoadSound("move", Properties.Resources.TankMove);
             soundSystem.LoadSound("shoot", Properties.Resources.TankShoot);
             soundSystem.LoadSound("explosion", Properties.Resources.Explosion);
@@ -100,25 +94,55 @@ namespace projectTank
 
             this.Load += Form1_Load;
         }
+
         private void Form1_Load(object sender, EventArgs e)
         {
             SetupGame();
 
-            gameTimer.Interval = 16;
-            gameTimer.Tick += GameLoop;
-            gameTimer.Start();
+            // Show a simple loading label while frames load
+            Label loadingLabel = new Label();
+            loadingLabel.Text = "Loading...";
+            loadingLabel.ForeColor = Color.White;
+            loadingLabel.BackColor = Color.Black;
+            loadingLabel.Font = new Font("Arial", 24, FontStyle.Bold);
+            loadingLabel.AutoSize = true;
+            loadingLabel.Location = new Point(ClientSize.Width / 2 - 60, ClientSize.Height / 2 - 20);
+            this.Controls.Add(loadingLabel);
+            loadingLabel.BringToFront();
+
+            // Load GIF frames on a background thread
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                LoadGifFrames(Properties.Resources.ExplosionFx);
+
+            }).ContinueWith(t =>
+            {
+                // Back on UI thread — remove label and start game
+                this.Controls.Remove(loadingLabel);
+                loadingLabel.Dispose();
+
+                gameTimer.Interval = 16;
+                gameTimer.Tick += GameLoop;
+                frameStopwatch.Restart();
+                gameTimer.Start();
+
+            }, System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
         }
+
         private void SetupGame()
         {
-            StartLevel(level); // <-- This ensures walls are created and scaled
+            StartLevel(level);
 
             playerController = new PlayerController(player, soundSystem);
             enemyAI = new TankAI(enemy, player, scaledBulletSize, scaledBulletSpeed, soundSystem);
 
             enemyAI.OnShoot += (b) =>
             {
-                bullets.Add(b);
-                soundSystem.Play("shoot", 0.7f);
+                if (b != null)
+                {
+                    bullets.Add(b);
+                    soundSystem.Play("shoot", 0.7f);
+                }
             };
 
             levelCompleted = false;
@@ -126,6 +150,12 @@ namespace projectTank
 
         private void GameLoop(object sender, EventArgs e)
         {
+            // Measure real elapsed time
+            actualElapsed = (int)frameStopwatch.ElapsedMilliseconds;
+            if (actualElapsed < 1) actualElapsed = 1;
+            if (actualElapsed > 100) actualElapsed = 100;
+            frameStopwatch.Restart();
+
             bool playerIsMoving = up || down || left || right;
             bool aiIsMoving = enemy.IsMoving;
 
@@ -138,40 +168,36 @@ namespace projectTank
             HandleBullets();
             UpdateExplosions();
             CheckGameState();
+            UpdateSmoke();
 
             if (playerShootCooldown > 0) playerShootCooldown--;
 
-            Invalidate(); // redraw
+            Invalidate();
         }
+
         private void StartLevel(int lvl)
         {
             int screenWidth = ClientSize.Width;
             int screenHeight = ClientSize.Height;
 
-            // Use screen resolution to compute scaling
             scaleX = (float)screenWidth / ORIGINAL_WIDTH;
             scaleY = (float)screenHeight / ORIGINAL_HEIGHT;
-            float scale = Math.Min(scaleX, scaleY); // keep proportions
+            float scale = Math.Min(scaleX, scaleY);
 
-            // Scaled sizes
             scaledTankSize = (int)(50 * scale);
             scaledBulletSize = (int)(10 * scale);
             scaledTankSpeed = Math.Max(1, (int)(6 * scale));
             scaledBulletSpeed = Math.Max(1, (int)(15 * scale));
 
-            // Initialize map
             map = new Map(screenWidth, screenHeight);
 
-            // Border thickness as 3% of screen height (scaled)
             int borderThickness = Math.Max(10, (int)(screenHeight * 0.03f));
 
-            // Border walls
-            map.AddWall(new Rectangle(0, 0, screenWidth, borderThickness)); // top
-            map.AddWall(new Rectangle(0, screenHeight - borderThickness, screenWidth, borderThickness)); // bottom
-            map.AddWall(new Rectangle(0, 0, borderThickness, screenHeight)); // left
-            map.AddWall(new Rectangle(screenWidth - borderThickness, 0, borderThickness, screenHeight)); // right
+            map.AddWall(new Rectangle(0, 0, screenWidth, borderThickness));
+            map.AddWall(new Rectangle(0, screenHeight - borderThickness, screenWidth, borderThickness));
+            map.AddWall(new Rectangle(0, 0, borderThickness, screenHeight));
+            map.AddWall(new Rectangle(screenWidth - borderThickness, 0, borderThickness, screenHeight));
 
-            // Interior walls based on level
             if (lvl == 2)
             {
                 map.AddWall(new Rectangle((int)(screenWidth * 0.25f), (int)(screenHeight * 0.1f),
@@ -182,28 +208,53 @@ namespace projectTank
                                           (int)(screenWidth * 0.4f), (int)(screenHeight * 0.05f)));
             }
 
-            // Spawn tanks with scaled size and speed
             player = new Tank(0, 0, Properties.Resources.TankA, scaledTankSize, scaledTankSize, scaledTankSpeed);
             enemy = new Tank(0, 0, Properties.Resources.TankB, scaledTankSize, scaledTankSize, scaledTankSpeed);
 
-            // Place tanks safely
             PlaceTanksSafely();
 
-            // Initialize controllers and AI
             playerController = new PlayerController(player, soundSystem);
             enemyAI = new TankAI(enemy, player, scaledBulletSize, scaledBulletSpeed, soundSystem);
             enemyAI.OnShoot += (b) => { if (b != null) bullets.Add(b); };
         }
 
-        /// <summary>
-        /// Safely places tanks randomly without colliding walls
-        /// </summary>
+        void LoadGifFrames(Image gif)
+        {
+            var frames = new List<GifFrame>();
+
+            FrameDimension dimension = new FrameDimension(gif.FrameDimensionsList[0]);
+            int frameCount = gif.GetFrameCount(dimension);
+
+            PropertyItem delayItem = null;
+            try { delayItem = gif.GetPropertyItem(0x5100); } catch { }
+
+            for (int i = 0; i < frameCount; i++)
+            {
+                gif.SelectActiveFrame(dimension, i);
+
+                // Clone to a new Bitmap so it's independent of the GIF stream
+                Bitmap frame = new Bitmap(gif.Width, gif.Height, PixelFormat.Format32bppArgb);
+                using (Graphics fg = Graphics.FromImage(frame))
+                    fg.DrawImage(gif, 0, 0, gif.Width, gif.Height);
+
+                int delay = 100;
+                if (delayItem != null && i * 4 + 3 < delayItem.Value.Length)
+                {
+                    delay = BitConverter.ToInt32(delayItem.Value, i * 4) * 10;
+                    if (delay <= 0) delay = 100;
+                }
+
+                frames.Add(new GifFrame { Image = frame, Delay = delay });
+            }
+
+            // Assign back on completion — safe since game hasn't started yet
+            explosionFrames = frames;
+        }
         private void PlaceTanksSafely()
         {
             Random rng = new Random();
             int attempts;
 
-            // Player tank
             attempts = 0;
             do
             {
@@ -213,7 +264,6 @@ namespace projectTank
                 attempts++;
             } while (map.IsColliding(player.Bounds) && attempts < 100);
 
-            // Enemy tank
             attempts = 0;
             do
             {
@@ -223,7 +273,7 @@ namespace projectTank
                 attempts++;
             } while (map.IsColliding(enemy.Bounds) && attempts < 100);
         }
-        // Key handling
+
         private void Form1_KeyDown(object sender, KeyEventArgs e)
         {
             switch (e.KeyCode)
@@ -255,11 +305,73 @@ namespace projectTank
             }
         }
 
+        class SmokeParticle
+        {
+            public float X, Y;
+            public float Size;
+            public float Alpha;
+            public float Life;
+            public float MaxLife;
+            public float VelX, VelY;
+
+            public SmokeParticle(float x, float y, Random rng)
+            {
+                X = x;
+                Y = y;
+                Size = rng.Next(4, 8);
+                Alpha = 1f;
+                Life = 0f;
+                MaxLife = rng.Next(300, 500);
+                VelX = (float)(rng.NextDouble() - 0.5) * 0.5f;
+                VelY = (float)(-0.3 - rng.NextDouble() * 0.5);
+            }
+        }
+
+        private void UpdateSmoke()
+        {
+            for (int i = smokeParticles.Count - 1; i >= 0; i--)
+            {
+                var p = smokeParticles[i];
+                p.Life += actualElapsed;
+
+                float lifeRatio = p.Life / p.MaxLife;
+                p.Alpha = 1f - lifeRatio;
+                p.Size += 0.3f;
+                p.X += p.VelX;
+                p.Y += p.VelY;
+
+                if (p.Life >= p.MaxLife)
+                    smokeParticles.RemoveAt(i);
+            }
+        }
+
+        class GifFrame
+        {
+            public Image Image;
+            public int Delay;
+        }
+
+        class AnimatedGif
+        {
+            public Rectangle Bounds;
+            public int CurrentFrame = 0;
+            public int Timer = 0;
+            public float Alpha = 1f;
+            public int TotalElapsed = 0;
+            public bool Finished = false;
+            public const int MAX_LIFETIME = 1200; // hard cap in ms
+
+            public AnimatedGif(Rectangle bounds)
+            {
+                Bounds = bounds;
+            }
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
 
-            // Draw map walls safely
+            // Draw map walls
             if (map != null && map.Walls != null)
             {
                 foreach (var wall in map.Walls)
@@ -269,33 +381,68 @@ namespace projectTank
                 }
             }
 
-            // Draw tanks safely
+            // Draw tanks
             if (player != null && player.TankImage != null)
                 DrawTank(g, player);
             if (enemy != null && enemy.TankImage != null)
                 DrawTank(g, enemy);
 
-            // Draw bullets safely
+            // Draw bullets
             foreach (var b in bullets.ToList())
             {
                 if (b != null)
                     g.FillEllipse(Brushes.Yellow, b.Bounds);
             }
 
-            // Draw active explosion GIFs
-            if (explosions != null)
+            // Draw smoke particles
+            foreach (var p in smokeParticles.ToList())
             {
-                foreach (var ex in explosions.ToList())
+                int alpha = (int)(p.Alpha * 255);
+                if (alpha <= 0) continue;
+                if (alpha > 255) alpha = 255;
+
+                using (SolidBrush brush = new SolidBrush(Color.FromArgb(alpha, 100, 100, 100)))
                 {
-                    try { ImageAnimator.UpdateFrames(ex.Img); } catch { }
-                    if (ex.Img != null)
-                        g.DrawImage(ex.Img, ex.Bounds);
+                    g.FillEllipse(brush, p.X - p.Size / 2, p.Y - p.Size / 2, p.Size, p.Size);
                 }
             }
 
+            // Draw explosions
+            foreach (var ex in explosions.ToList())
+            {
+                if (ex.Finished) continue;
+                if (ex.CurrentFrame < 0 || ex.CurrentFrame >= explosionFrames.Count) continue;
 
+                var frame = explosionFrames[ex.CurrentFrame];
+                float alpha = Math.Max(0f, Math.Min(1f, ex.Alpha));
 
-            // Draw health bars safely
+                if (alpha <= 0f) continue;
+
+                if (alpha >= 1f)
+                {
+                    // No transparency needed — simple fast draw
+                    g.DrawImage(frame.Image, ex.Bounds);
+                }
+                else
+                {
+                    ColorMatrix matrix = new ColorMatrix();
+                    matrix.Matrix33 = alpha;
+                    ImageAttributes attributes = new ImageAttributes();
+                    attributes.SetColorMatrix(matrix);
+
+                    g.DrawImage(
+                        frame.Image,
+                        ex.Bounds,
+                        0, 0, frame.Image.Width, frame.Image.Height,
+                        GraphicsUnit.Pixel,
+                        attributes
+                    );
+
+                    attributes.Dispose();
+                }
+            }
+
+            // Draw health bars
             if (player != null)
                 DrawHealthBar(g, player);
             if (enemy != null)
@@ -335,105 +482,132 @@ namespace projectTank
 
         private void HandleBullets()
         {
-            foreach (var bullet in bullets.ToList())
+            for (int i = bullets.Count - 1; i >= 0; i--)
             {
+                var bullet = bullets[i];
                 bullet.Move();
 
+                // Spawn smoke trail only if under cap
+                if (smokeParticles.Count < MAX_SMOKE_PARTICLES)
+                {
+                    float offsetX = rng.Next(-2, 3);
+                    float offsetY = rng.Next(-2, 3);
+
+                    smokeParticles.Add(new SmokeParticle(
+                        bullet.Bounds.X + bullet.Bounds.Width / 2 + offsetX,
+                        bullet.Bounds.Y + bullet.Bounds.Height / 2 + offsetY,
+                        rng
+                    ));
+                }
+
+                // Out of bounds
                 if (bullet.Bounds.X < 0 || bullet.Bounds.Y < 0 ||
                     bullet.Bounds.X > ClientSize.Width || bullet.Bounds.Y > ClientSize.Height)
                 {
-                    bullets.Remove(bullet);
+                    bullets.RemoveAt(i);
                     continue;
                 }
 
+                // Player bullet hits enemy
                 if (bullet.Owner == player && bullet.Bounds.IntersectsWith(enemy.Bounds))
                 {
                     enemy.TakeDamage(10);
-                    // create explosion gif at enemy location
                     CreateExplosion(enemy.Bounds);
-                    bullets.Remove(bullet);
+                    bullets.RemoveAt(i);
                     soundSystem.Play("explosion", 0.7f);
                     continue;
                 }
 
+                // Enemy bullet hits player
                 if (bullet.Owner == enemy && bullet.Bounds.IntersectsWith(player.Bounds))
                 {
                     player.TakeDamage(10);
-                    // create explosion gif at player location proportional to tank size
                     CreateExplosion(player.Bounds);
-                    bullets.Remove(bullet);
+                    bullets.RemoveAt(i);
                     soundSystem.Play("explosion", 0.7f);
                     continue;
                 }
 
+                // Bullet hits wall
                 if (map.IsColliding(bullet.Bounds))
                 {
-                    // create explosion gif at collision location (bullet)
                     CreateExplosion(bullet.Bounds);
-                    bullets.Remove(bullet);
+                    bullets.RemoveAt(i);
                     soundSystem.Play("explosion", 0.7f);
                 }
             }
         }
 
-        /// <summary>
-        /// Create an animated gif explosion at the given bounds.
-        /// </summary>
         private void CreateExplosion(Rectangle bounds)
         {
-            try
-            {
-                // Load GIF from Resources instead of file path
-                Image img = Properties.Resources.ExplosionFx;
+            int baseSize = Math.Max(bounds.Width, bounds.Height);
+            int size = Math.Max(32, (int)(baseSize * 1.2));
 
-                // Start animating
-                EventHandler handler = new EventHandler(OnGifFrameChanged);
-                ImageAnimator.Animate(img, handler);
+            Rectangle drawBounds = new Rectangle(
+                bounds.X + (bounds.Width - size) / 2,
+                bounds.Y + (bounds.Height - size) / 2,
+                size,
+                size
+            );
 
-                // Scale explosion based on object size
-                int baseSize = Math.Max(bounds.Width, bounds.Height);
-                int w = Math.Max(32, (int)(baseSize * 2.0));
-                int h = Math.Max(32, (int)(baseSize * 2.0));
-
-                Rectangle drawBounds = new Rectangle(
-                    bounds.X + (bounds.Width - w) / 2,
-                    bounds.Y + (bounds.Height - h) / 2,
-                    w,
-                    h
-                );
-
-                var ag = new AnimatedGif(img, drawBounds, 1000);
-                ag.FrameChangedHandler = handler;
-
-                explosions.Add(ag);
-            }
-            catch
-            {
-                // ignore errors
-            }
-        }
-
-        private void OnGifFrameChanged(object sender, EventArgs e)
-        {
-            // ensure the form repaints when the animated gif advances frames
-            Invalidate();
+            explosions.Add(new AnimatedGif(drawBounds));
         }
 
         private void UpdateExplosions()
         {
-            if (explosions == null || explosions.Count == 0) return;
-
-            foreach (var ex in explosions.ToList())
+            for (int i = explosions.Count - 1; i >= 0; i--)
             {
-                // advance animated gif frames
-                try { ImageAnimator.UpdateFrames(ex.Img); } catch { }
+                var ex = explosions[i];
+                ex.Timer += actualElapsed;
+                ex.TotalElapsed += actualElapsed;
 
-                ex.AgeMs += gameTimer.Interval;
-                if (ex.AgeMs > ex.DurationMs)
+                // Hard timeout — always remove no matter what
+                if (ex.TotalElapsed >= AnimatedGif.MAX_LIFETIME)
                 {
-                    try { if (ex.FrameChangedHandler != null) ImageAnimator.StopAnimate(ex.Img, ex.FrameChangedHandler); } catch { }
-                    try { ex.Img.Dispose(); } catch { }
-                    explosions.Remove(ex);
+                    explosions.RemoveAt(i);
+                    continue;
+                }
+
+                // Already done
+                if (ex.Finished)
+                {
+                    explosions.RemoveAt(i);
+                    continue;
+                }
+
+                // Safety: frame out of range
+                if (ex.CurrentFrame >= explosionFrames.Count)
+                {
+                    ex.Finished = true;
+                    explosions.RemoveAt(i);
+                    continue;
+                }
+
+                // Advance frame when delay is met
+                if (ex.Timer >= explosionFrames[ex.CurrentFrame].Delay)
+                {
+                    ex.Timer = 0;
+                    ex.CurrentFrame++;
+
+                    // Past last frame — done
+                    if (ex.CurrentFrame >= explosionFrames.Count)
+                    {
+                        ex.Finished = true;
+                        explosions.RemoveAt(i);
+                        continue;
+                    }
+
+                    // Fade out in the last 40% of frames
+                    if (ex.CurrentFrame > explosionFrames.Count * 0.6f)
+                        ex.Alpha -= 0.15f;
+
+                    // Fully faded — done
+                    if (ex.Alpha <= 0f)
+                    {
+                        ex.Finished = true;
+                        explosions.RemoveAt(i);
+                        continue;
+                    }
                 }
             }
         }
@@ -450,11 +624,11 @@ namespace projectTank
 
             if (!enemy.IsAlive)
             {
-                gameTimer.Stop(); // temporarily stop updates
+                gameTimer.Stop();
 
                 MessageBox.Show($"Level {level} Complete!");
 
-                level++; // go to next level
+                level++;
                 if (level > maxLevel)
                 {
                     MessageBox.Show("You completed all levels!");
@@ -462,16 +636,15 @@ namespace projectTank
                     return;
                 }
 
-                // Clear previous bullets
                 bullets.Clear();
+                explosions.Clear();
+                smokeParticles.Clear();
 
-                // Start next level
                 StartLevel(level);
 
-                // Reset cooldowns etc.
                 playerShootCooldown = 0;
 
-                // Restart the timer
+                frameStopwatch.Restart();
                 gameTimer.Start();
             }
         }
