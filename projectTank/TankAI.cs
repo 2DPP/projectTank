@@ -2,54 +2,94 @@
 using System.Collections.Generic;
 using System.Drawing;
 
-
 namespace projectTank
 {
+    // =========================================================================
+    // TANK AI
+    // Controls the enemy tank automatically each frame.
+    // The AI has two main behaviors:
+    //   1. MOVEMENT — chases the player while avoiding walls and getting unstuck
+    //   2. SHOOTING — fires at the player when they share a row or column
+    //                 and there are no walls in between
+    // =========================================================================
     public class TankAI
     {
-        // Reference to the enemy tank controlled by AI
-        private Tank enemy;
+        // =====================================================================
+        // REFERENCES
+        // The AI needs access to both tanks and the map to make decisions
+        // =====================================================================
+        private Tank enemy;           // The tank this AI is controlling
+        private Tank player;          // The player tank to chase and shoot at
+        private Map map;              // The current level map for wall collision checks
+        private SoundSystem soundSystem; // Used to trigger movement and shoot sounds
 
-        // Reference to the player tank so the AI can chase or shoot it
-        private Tank player;
-
-        // Reference to the map to detect wall collisions
-        private Map map;
-
-        // Sound system for movement and shooting sounds
-        private SoundSystem soundSystem;
-
-        // Random generator used for random movement decisions
+        // =====================================================================
+        // RANDOMNESS
+        // Used to make movement feel less predictable and robotic
+        // =====================================================================
         private Random rng = new Random();
 
-        // Timer controlling how often the AI changes decisions
-        private int decisionTimer = 0;
+        // =====================================================================
+        // TIMERS
+        // Control how often decisions are made and how fast the AI can shoot
+        // =====================================================================
+        private int decisionTimer = 0;  // Counts frames since the last decision
+        private int shootCooldown = 0;  // Counts frames since the last shot
 
-        // Cooldown timer for shooting so AI does not spam bullets
-        private int shootCooldown = 0;
-
-        // Current movement direction of the AI
+        // =====================================================================
+        // MOVEMENT STATE
+        // Tracks which direction the AI is currently moving
+        // =====================================================================
         private Tank.TankDirection moveDirection = Tank.TankDirection.Up;
 
-        // Bullet settings passed from the game
+        // =====================================================================
+        // BULLET SETTINGS
+        // Passed in from the game so bullet size and speed match the current scale
+        // =====================================================================
         private int bulletSize;
         private int bulletSpeed;
 
-        // Variables used to detect if the AI tank becomes stuck
+        // =====================================================================
+        // STUCK DETECTION
+        // If the AI hasn't moved for several frames, it is probably stuck against
+        // a wall. We track the last position and count stuck frames to detect this.
+        // =====================================================================
         private Point lastPosition;
         private int stuckTimer = 0;
 
-        // Event used to notify the game when the AI fires a bullet
+        // =====================================================================
+        // SHOOT EVENT
+        // Instead of adding bullets directly, the AI raises this event.
+        // Form1 listens to it and adds the bullet to the game's bullet list.
+        // This keeps the AI decoupled from the game's internal state.
+        // =====================================================================
         public event Action<Bullet> OnShoot;
 
+        // =====================================================================
+        // DIRECTION COMMITMENT
+        // The AI commits to a direction for a set number of frames before
+        // reconsidering. This prevents it from changing direction every frame,
+        // which would make it jitter and look unnatural.
+        // =====================================================================
         private int moveCommitTimer = 0;
-        private int moveCommitDuration = 60; // frames to keep moving in one direction
+        private int moveCommitDuration = 60; // Hold a direction for 60 frames (~1 second)
 
-        // Remember directions that recently failed
+        // =====================================================================
+        // BLOCKED DIRECTION MEMORY
+        // When a direction leads into a wall, it is remembered as blocked
+        // for a short time. This stops the AI from repeatedly trying the same
+        // direction and getting stuck in a corner.
+        // =====================================================================
         private Dictionary<Tank.TankDirection, int> blockedDirections =
             new Dictionary<Tank.TankDirection, int>();
 
-        private int blockedMemoryTime = 40; // frames before direction can be tried again
+        private int blockedMemoryTime = 40; // Frames before a blocked direction can be retried
+
+        // =====================================================================
+        // CONSTRUCTOR
+        // Stores all references needed for movement, shooting, and sound.
+        // Records the starting position so stuck detection has a baseline.
+        // =====================================================================
         public TankAI(Tank enemyTank, Tank playerTank, int bulletSize, int bulletSpeed, SoundSystem soundSystem)
         {
             this.enemy = enemyTank;
@@ -58,56 +98,71 @@ namespace projectTank
             this.bulletSpeed = bulletSpeed;
             this.soundSystem = soundSystem;
 
-            // Store initial position so we can later detect if the tank is stuck
+            // Record starting position for stuck detection on the very first frame
             lastPosition = enemy.Bounds.Location;
         }
 
-        // Called every game update
+        // =====================================================================
+        // UPDATE
+        // Called every frame from the game loop.
+        // Runs both movement and shooting logic in order.
+        // =====================================================================
         public void Update(Map map)
         {
             this.map = map;
 
-            HandleMovement();
-            HandleShooting();
+            HandleMovement();  // Decide where to move and move there
+            HandleShooting();  // Check if the player can be shot at
         }
 
+        // =====================================================================
+        // HANDLE MOVEMENT
+        // Each frame, the AI:
+        //   1. Counts down blocked direction timers
+        //   2. Decides a new direction after the commit period ends
+        //   3. Redirects away from walls using shuffled direction attempts
+        //   4. Moves the tank and checks if it has become stuck
+        // =====================================================================
         private void HandleMovement()
         {
             decisionTimer++;
             moveCommitTimer++;
-            // Reduce blocked direction timers
+
+            // Age all blocked directions — remove them once their timer runs out
             var keys = new List<Tank.TankDirection>(blockedDirections.Keys);
             foreach (var key in keys)
             {
                 blockedDirections[key]--;
-
                 if (blockedDirections[key] <= 0)
                     blockedDirections.Remove(key);
             }
-            // Only allow changing direction after commitment period
+
+            // Only pick a new direction once the commit duration has expired
             if (moveCommitTimer >= moveCommitDuration)
             {
                 moveCommitTimer = 0;
 
-                int decision = rng.Next(0, 3);
+                int decision = rng.Next(0, 3); // 0 = wander randomly, 1-2 = chase player
 
                 if (decision == 0)
                 {
-                    // Random wandering
+                    // Random wandering — pick any of the 4 directions at random
                     moveDirection = (Tank.TankDirection)rng.Next(0, 4);
                 }
                 else
                 {
-                    // Chase player
+                    // Chase the player — move along whichever axis has the larger gap
                     if (Math.Abs(enemy.Bounds.X - player.Bounds.X) >
                         Math.Abs(enemy.Bounds.Y - player.Bounds.Y))
                     {
+                        // Horizontal gap is larger — move left or right toward the player
                         moveDirection = enemy.Bounds.X < player.Bounds.X
                             ? Tank.TankDirection.Right
                             : Tank.TankDirection.Left;
                     }
                     else
                     {
+                        // Vertical gap is larger — move up or down toward the player
                         moveDirection = enemy.Bounds.Y < player.Bounds.Y
                             ? Tank.TankDirection.Down
                             : Tank.TankDirection.Up;
@@ -116,20 +171,23 @@ namespace projectTank
             }
 
             // WALL AVOIDANCE
+            // If the chosen direction leads into a wall, find an alternative
             if (WillHitWall(moveDirection))
             {
-                // Remember this direction is blocked
+                // Mark this direction as blocked so we don't immediately retry it
                 blockedDirections[moveDirection] = blockedMemoryTime;
 
+                // Build a list of all 4 directions and shuffle them randomly
+                // so the AI doesn't always try the same fallback order
                 Tank.TankDirection[] directions =
                 {
-                  Tank.TankDirection.Up,
-                   Tank.TankDirection.Down,
-                     Tank.TankDirection.Left,
-                        Tank.TankDirection.Right
+                    Tank.TankDirection.Up,
+                    Tank.TankDirection.Down,
+                    Tank.TankDirection.Left,
+                    Tank.TankDirection.Right
                 };
 
-                // Shuffle directions
+                // Fisher-Yates shuffle — swaps each element with a random other element
                 for (int i = 0; i < directions.Length; i++)
                 {
                     int swap = rng.Next(directions.Length);
@@ -138,6 +196,7 @@ namespace projectTank
                     directions[swap] = temp;
                 }
 
+                // Pick the first direction that is neither blocked nor hitting a wall
                 foreach (var dir in directions)
                 {
                     if (!WillHitWall(dir) && !blockedDirections.ContainsKey(dir))
@@ -148,28 +207,31 @@ namespace projectTank
                 }
             }
 
+            // Apply the chosen direction and move the tank
             enemy.SetDirection(moveDirection);
             enemy.IsMoving = true;
             enemy.Move(map);
 
             soundSystem.UpdateAIMovement(enemy.IsMoving);
 
-            // UNSTUCK DETECTION
+            // STUCK DETECTION
+            // If the tank's position hasn't changed, it may be wedged against something
             if (enemy.Bounds.Location == lastPosition)
             {
                 stuckTimer++;
 
+                // After 20 frames of no movement, force a new clear direction
                 if (stuckTimer > 20)
                 {
-                    // Force escape direction
                     Tank.TankDirection[] dirs =
                     {
-                Tank.TankDirection.Up,
-                Tank.TankDirection.Down,
-                Tank.TankDirection.Left,
-                Tank.TankDirection.Right
-            };
+                        Tank.TankDirection.Up,
+                        Tank.TankDirection.Down,
+                        Tank.TankDirection.Left,
+                        Tank.TankDirection.Right
+                    };
 
+                    // Pick the first direction that won't immediately hit a wall
                     foreach (var dir in dirs)
                     {
                         if (!WillHitWall(dir))
@@ -179,47 +241,59 @@ namespace projectTank
                         }
                     }
 
-                    stuckTimer = 0;
+                    stuckTimer = 0; // Reset so we don't trigger again next frame
                 }
             }
             else
             {
-                stuckTimer = 0;
+                stuckTimer = 0; // Tank moved successfully — it is not stuck
             }
 
+            // Save position this frame to compare against next frame
             lastPosition = enemy.Bounds.Location;
         }
 
+        // =====================================================================
+        // HANDLE SHOOTING
+        // The AI fires only when two conditions are both true:
+        //   1. The player is lined up on the same row or column as the AI
+        //   2. No wall blocks the path between the AI and the player
+        // A cooldown prevents the AI from firing on every single frame.
+        // =====================================================================
         private void HandleShooting()
         {
             shootCooldown++;
 
-            // Prevent the AI from shooting too frequently
+            // Enforce a minimum gap between shots
             if (shootCooldown < 50) return;
 
-            // Check if the player is roughly aligned horizontally or vertically
+            // Check alignment — is the player close enough to the same row or column?
             bool sameRow = Math.Abs(enemy.Bounds.Y - player.Bounds.Y) < bulletSize * 2;
             bool sameCol = Math.Abs(enemy.Bounds.X - player.Bounds.X) < bulletSize * 2;
 
             if (sameRow)
             {
-                enemy.SetDirection(enemy.Bounds.X < player.Bounds.X ?
-                    Tank.TankDirection.Right :
-                    Tank.TankDirection.Left);
+                // Face toward the player horizontally
+                enemy.SetDirection(enemy.Bounds.X < player.Bounds.X
+                    ? Tank.TankDirection.Right
+                    : Tank.TankDirection.Left);
 
+                // Only fire if no wall is in the way
                 if (HasLineOfSight())
                 {
                     OnShoot?.Invoke(new Bullet(enemy, bulletSize, bulletSize, bulletSpeed));
                     soundSystem.Play("shoot", 0.7f);
-                    shootCooldown = 0;
+                    shootCooldown = 0; // Reset cooldown after firing
                 }
             }
             else if (sameCol)
             {
-                enemy.SetDirection(enemy.Bounds.Y < player.Bounds.Y ?
-                    Tank.TankDirection.Down :
-                    Tank.TankDirection.Up);
+                // Face toward the player vertically
+                enemy.SetDirection(enemy.Bounds.Y < player.Bounds.Y
+                    ? Tank.TankDirection.Down
+                    : Tank.TankDirection.Up);
 
+                // Only fire if no wall is in the way
                 if (HasLineOfSight())
                 {
                     OnShoot?.Invoke(new Bullet(enemy, bulletSize, bulletSize, bulletSpeed));
@@ -229,68 +303,62 @@ namespace projectTank
             }
         }
 
-        // Predicts whether the tank will collide with a wall
-        // if it moves in a given direction
+        // =====================================================================
+        // WILL HIT WALL
+        // Simulates one step of movement in a given direction and checks
+        // whether that position would collide with any wall on the map.
+        // Used before moving to safely predict and avoid wall collisions.
+        // =====================================================================
         private bool WillHitWall(Tank.TankDirection dir)
         {
-            Rectangle next = enemy.Bounds;
+            Rectangle next = enemy.Bounds; // Start from the current position
 
+            // Shift the rectangle by one step in the given direction
             switch (dir)
             {
-                case Tank.TankDirection.Up:
-                    next.Y -= enemy.Speed;
-                    break;
-
-                case Tank.TankDirection.Down:
-                    next.Y += enemy.Speed;
-                    break;
-
-                case Tank.TankDirection.Left:
-                    next.X -= enemy.Speed;
-                    break;
-
-                case Tank.TankDirection.Right:
-                    next.X += enemy.Speed;
-                    break;
+                case Tank.TankDirection.Up: next.Y -= enemy.Speed; break;
+                case Tank.TankDirection.Down: next.Y += enemy.Speed; break;
+                case Tank.TankDirection.Left: next.X -= enemy.Speed; break;
+                case Tank.TankDirection.Right: next.X += enemy.Speed; break;
             }
 
-            return map.IsColliding(next);
+            return map.IsColliding(next); // True if that position overlaps a wall
         }
-        // Checks if a wall blocks the shot between enemy and player
+
+        // =====================================================================
+        // HAS LINE OF SIGHT
+        // Steps an invisible check rectangle forward from the enemy tank
+        // in the direction it is facing, one speed unit at a time.
+        //
+        // Returns true  — the path is clear and the player is reachable
+        // Returns false — a wall is blocking the shot, or the check left the map
+        //
+        // This prevents the AI from shooting through walls.
+        // =====================================================================
         private bool HasLineOfSight()
         {
-            Rectangle check = enemy.Bounds;
+            Rectangle check = enemy.Bounds; // Start the check at the enemy's position
 
             while (true)
             {
+                // Advance the check one step in the firing direction
                 switch (enemy.Direction)
                 {
-                    case Tank.TankDirection.Up:
-                        check.Y -= enemy.Speed;
-                        break;
-
-                    case Tank.TankDirection.Down:
-                        check.Y += enemy.Speed;
-                        break;
-
-                    case Tank.TankDirection.Left:
-                        check.X -= enemy.Speed;
-                        break;
-
-                    case Tank.TankDirection.Right:
-                        check.X += enemy.Speed;
-                        break;
+                    case Tank.TankDirection.Up: check.Y -= enemy.Speed; break;
+                    case Tank.TankDirection.Down: check.Y += enemy.Speed; break;
+                    case Tank.TankDirection.Left: check.X -= enemy.Speed; break;
+                    case Tank.TankDirection.Right: check.X += enemy.Speed; break;
                 }
 
-                // If we hit a wall, the shot is blocked
+                // A wall is blocking the path — shot is not possible
                 if (map.IsColliding(check))
                     return false;
 
-                // If we reach the player, the shot is clear
+                // The check reached the player — clear line of sight confirmed
                 if (check.IntersectsWith(player.Bounds))
                     return true;
 
-                // Stop checking if we go outside the map
+                // The check has left the map entirely — stop to avoid an infinite loop
                 if (check.X < 0 || check.Y < 0 || check.X > map.Width || check.Y > map.Height)
                     return false;
             }
