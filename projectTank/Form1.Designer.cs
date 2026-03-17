@@ -1,6 +1,6 @@
 ﻿namespace projectTank
 {
-    partial class Form1
+    partial class wwForm1
     {
         /// <summary>
         /// Required designer variable.
