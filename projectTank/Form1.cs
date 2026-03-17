@@ -8,7 +8,7 @@ using projectTank;
 
 namespace projectTank
 {
-    public partial class Form1 : Form
+    public partial class wwForm1 : Form
     {
         // Game objects
         private Tank player;
@@ -56,7 +56,7 @@ namespace projectTank
         private int maxLevel = 2;
         private bool levelCompleted = false;
 
-        public Form1()
+        public wwForm1()
         {
             InitializeComponent();
 
@@ -550,7 +550,37 @@ namespace projectTank
                 size
             );
 
+<<<<<<< Updated upstream
             explosions.Add(new AnimatedGif(drawBounds));
+=======
+                // Scale explosion based on object size
+                int baseSize = Math.Max(bounds.Width, bounds.Height);
+                int w = Math.Max(32, (int)(baseSize * 2.0));
+                int h = Math.Max(32, (int)(baseSize * 2.0));
+
+                Rectangle drawBounds = new Rectangle(
+                    bounds.X + (bounds.Width - w) / 2,
+                    bounds.Y + (bounds.Height - h) / 2,
+                    w,
+                    h
+                );
+
+                var ag = new AnimatedGif(img, drawBounds, 1000);
+                ag.FrameChangedHandler = handler;
+
+                explosions.Add(ag);
+            }
+            catch
+            {
+                // ignore errors
+            }
+        }
+
+        private void OnGifFrameChanged(object sender, EventArgs e)
+        {
+            // ensure the form repaints when the animated gif advances frames
+            Invalidate();
+>>>>>>> Stashed changes
         }
 
         private void UpdateExplosions()
