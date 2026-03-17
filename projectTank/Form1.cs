@@ -16,22 +16,6 @@ namespace projectTank
         private TankAI enemyAI;
         private PlayerController playerController;
         private List<Bullet> bullets = new List<Bullet>();
-        // Animated GIF explosions
-        private class AnimatedGif
-        {
-            public Image Img;
-            public Rectangle Bounds;
-            public int AgeMs;
-            public int DurationMs;
-            public EventHandler FrameChangedHandler;
-            public AnimatedGif(Image img, Rectangle bounds, int durationMs = 1000)
-            {
-                Img = img;
-                Bounds = bounds;
-                AgeMs = 0;
-                DurationMs = durationMs;
-            }
-        }
         private List<AnimatedGif> explosions = new List<AnimatedGif>();
         private Map map;
 
@@ -100,6 +84,7 @@ namespace projectTank
 
             this.Load += Form1_Load;
         }
+
         private void Form1_Load(object sender, EventArgs e)
         {
             SetupGame();
@@ -254,7 +239,39 @@ namespace projectTank
                 case Keys.D: right = false; break;
             }
         }
+        class SmokeParticle
+        {
+            public float X, Y;
+            public float Size;
+            public float Alpha;
+            public float Life;
+            public float MaxLife;
 
+            public SmokeParticle(float x, float y)
+            {
+                X = x;
+                Y = y;
+                Size = 6f;
+                Alpha = 1f;
+                Life = 0f;
+                MaxLife = 500f; // milliseconds
+            }
+        }
+        private class AnimatedGif
+        {
+            public Image Img;
+            public Rectangle Bounds;
+            public int AgeMs;
+            public int DurationMs;
+            public EventHandler FrameChangedHandler;
+            public AnimatedGif(Image img, Rectangle bounds, int durationMs = 1000)
+            {
+                Img = img;
+                Bounds = bounds;
+                AgeMs = 0;
+                DurationMs = durationMs;
+            }
+        }
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
