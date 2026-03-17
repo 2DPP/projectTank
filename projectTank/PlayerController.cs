@@ -1,4 +1,9 @@
-﻿namespace projectTank // Defines the namespace for organizing related classes
+﻿// PlayerController.cs
+// Translates keyboard input (W/A/S/D booleans) into tank movement commands.
+// Sets the tank's direction, calls Move() each frame, and triggers the
+// movement sound through SoundSystem based on whether the tank is moving.
+
+namespace projectTank // Defines the namespace for organizing related classes
 {
     public class PlayerController // Handles player input and movement logic for the tank
     {

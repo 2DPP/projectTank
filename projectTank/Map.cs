@@ -1,6 +1,11 @@
 ﻿using System.Collections.Generic; // Provides List<T> for storing multiple objects
 using System.Drawing; // Provides graphics-related classes like Rectangle, Brush, Graphics
 
+// Wall.cs / Map.cs
+// Wall represents a single rectangular obstacle with a color and a Draw() method.
+// Map holds all walls in a list and provides AddWall(), IsColliding(), and Draw().
+// IsColliding() is used by tanks, bullets, and the AI to check for wall overlap.
+
 public class Wall // Represents a wall object in the game
 {
     public Rectangle Bounds { get; private set; }

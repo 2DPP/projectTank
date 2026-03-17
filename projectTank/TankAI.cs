@@ -2,6 +2,14 @@
 using System.Collections.Generic;
 using System.Drawing;
 
+
+// TankAI.cs
+// Controls the enemy tank automatically each frame. Handles two behaviors:
+// movement (chases the player, avoids walls, detects when stuck) and shooting
+// (fires only when aligned with the player and line of sight is clear).
+// Raises an OnShoot event instead of adding bullets directly, keeping it
+// decoupled from Form1.
+
 namespace projectTank
 {
     // =========================================================================

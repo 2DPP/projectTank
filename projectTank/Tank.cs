@@ -1,5 +1,10 @@
-﻿using System.Collections.Generic; // Provides generic collections like List<T> (not used here but included)
-using System.Drawing; // Provides graphics-related classes like Rectangle and Image
+﻿using System.Collections.Generic; 
+using System.Drawing;
+
+// Tank.cs
+// Represents a tank in the game. Stores position (Bounds), speed, health,
+// direction, and sprite image. Handles movement with wall collision checking
+// via Move(), and exposes TakeDamage() and IsAlive for health management.
 
 namespace projectTank // Defines the namespace for organizing related classes
 {

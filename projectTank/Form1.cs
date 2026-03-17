@@ -6,6 +6,11 @@ using System.Linq;
 using System.Windows.Forms;
 using projectTank;
 
+// Form1.cs
+// The main game controller. Manages the game loop (60 FPS timer), handles
+// keyboard input, spawns and tracks all game objects (tanks, bullets, explosions,
+// smoke), draws everything to the screen via OnPaint, and checks win/lose
+// conditions. Also handles level transitions and resolution scaling.
 namespace projectTank
 {
     public partial class Form1 : Form

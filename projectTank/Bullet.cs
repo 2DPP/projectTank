@@ -1,6 +1,12 @@
 ﻿using System.Drawing;
 // Allows use of graphics-related classes like Rectangle
 
+
+// Bullet.cs
+// Represents a projectile fired by a tank. Spawns at the center of the owner
+// tank, inherits its direction, and moves each frame via Move(). Stores a
+// reference to the owner Tank so Form1 can tell which tank fired it.
+
 namespace projectTank
 // Groups related classes together (like a folder)
 {

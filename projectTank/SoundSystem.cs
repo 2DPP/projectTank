@@ -3,6 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using NAudio.Wave;
 
+// SoundSystem.cs
+// Manages all audio in the game using NAudio. Handles one-shot sound effects
+// (shoot, explosion), a looping background music track, and separate looping
+// engine sounds for the player and AI tanks that start/stop based on movement.
+
 namespace projectTank
 {
     // =========================================================================
